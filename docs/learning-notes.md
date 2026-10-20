@@ -29,6 +29,7 @@
 - 枠の上を子要素が通ると、ドラッグの色が点滅する。子要素に `pointer-events-none` を付けて防ぐ
 - Tailwind CSS 4 では、グラデーションは `bg-linear-to-br`（旧 `bg-gradient-to-br` ではない）
 - 枠線のグラデーションは、外側にグラデーション、内側に暗い背景を重ねて、`p-px`（1px の差）で作る
+- 線のグラデーションは、幅や高さが 0 の線（「＋」の縦線・横線、「↑」の縦線）には、既定の指定（`objectBoundingBox`）では塗れず、**描かれないことがあった**。`gradientUnits="userSpaceOnUse"` と、アイコンの座標（24×24）で位置を指定して直した。ブラウザの拡張（Dark Reader など）の影響を避けるため、シークレットウィンドウでも確かめた
 
 ### 6. 入力チェック
 - 拡張子は、最後の `.` より後ろを小文字にして調べる。`.` が無い、または先頭だけのファイル名は、拡張子なしとして扱う
@@ -94,6 +95,7 @@
 | `create policy ... on storage.objects` | Storage の権限のルールを作る SQL |
 | `aspect-square` / `object-cover` | 正方形にする／枠いっぱいに、はみ出す部分を切り取って画像を表示する |
 | `pointer-events-none` | その要素を、マウス操作の対象から外す |
+| `gradientUnits="userSpaceOnUse"` | SVG のグラデーションの位置を、図形の大きさではなく、アイコンの座標（24×24）で決める指定 |
 | `!.env.example`（`.gitignore`） | 除外の中の、例外（これは除外しない）の指定 |
 
 ### 用語
