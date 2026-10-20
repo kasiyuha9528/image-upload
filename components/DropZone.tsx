@@ -55,7 +55,14 @@ export default function DropZone({ onUploaded }: Props) {
       {/* アイコンの線に使うグラデーションの定義（画面には表示されない） */}
       <svg width="0" height="0" className="absolute" aria-hidden="true">
         <defs>
-          <linearGradient id="icon-gradient" x1="0" y1="0" x2="1" y2="1">
+          <linearGradient
+            id="icon-gradient"
+            gradientUnits="userSpaceOnUse"
+            x1="0"
+            y1="0"
+            x2="24"
+            y2="24"
+          >
             <stop offset="0%" stopColor="#22d3ee" />
             <stop offset="100%" stopColor="#a855f7" />
           </linearGradient>
