@@ -4,19 +4,16 @@ import { useRef, useState } from "react";
 import { CloudUpload, FolderPlus } from "lucide-react";
 import { validateImage } from "@/lib/validateImage";
 import { uploadImage } from "@/lib/uploadImage";
+import type { GalleryImage } from "@/lib/listImages";
 
 type Rejected = { name: string; reason: string };
-type Uploaded = { name: string; url: string };
-type CopyState = { url: string; ok: boolean } | null;
+type Props = { onUploaded: (images: GalleryImage[]) => void };
 
-export default function DropZone() {
+export default function DropZone({ onUploaded }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploaded, setUploaded] = useState<Uploaded[]>([]);
   const [rejected, setRejected] = useState<Rejected[]>([]);
-  const [hasChecked, setHasChecked] = useState(false);
-  const [copyState, setCopyState] = useState<CopyState>(null);
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0 || isUploading) return;
@@ -37,32 +34,20 @@ export default function DropZone() {
     }
 
     setIsUploading(true);
-    setCopyState(null);
 
-    const done: Uploaded[] = [];
+    const done: GalleryImage[] = [];
     for (const file of okFiles) {
       const result = await uploadImage(file);
       if (result.ok) {
-        done.push({ name: file.name, url: result.url });
+        done.push({ name: result.path, url: result.url });
       } else {
         ngFiles.push({ name: file.name, reason: result.reason });
       }
     }
 
-    setUploaded(done);
+    onUploaded(done);
     setRejected(ngFiles);
-    setHasChecked(true);
     setIsUploading(false);
-  }
-
-  async function copyUrl(url: string) {
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopyState({ url, ok: true });
-    } catch (error) {
-      console.error("copy error:", error);
-      setCopyState({ url, ok: false });
-    }
   }
 
   return (
@@ -154,51 +139,14 @@ export default function DropZone() {
         <p className="mt-4 text-sm text-gray-300">アップロード中…</p>
       )}
 
-      {hasChecked && !isUploading && (
-        <div className="mt-4 space-y-3 text-sm">
-          {uploaded.length > 0 && (
-            <ul className="space-y-2">
-              {uploaded.map((u) => (
-                <li
-                  key={u.url}
-                  className="rounded-lg border border-gray-700 p-3"
-                >
-                  <p className="text-gray-200">{u.name}</p>
-                  <div className="mt-1 flex items-center gap-2">
-                    <a
-                      href={u.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="min-w-0 flex-1 truncate text-cyan-300 underline"
-                    >
-                      {u.url}
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() => copyUrl(u.url)}
-                      className="shrink-0 rounded border border-gray-600 px-2 py-1 text-xs hover:bg-neutral-800"
-                    >
-                      {copyState?.url === u.url
-                        ? copyState.ok
-                          ? "コピーしました"
-                          : "コピー失敗"
-                        : "URLをコピー"}
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-          {rejected.length > 0 && (
-            <ul className="space-y-1 text-red-400">
-              {rejected.map((r, i) => (
-                <li key={`${r.name}-${i}`}>
-                  {r.name}：{r.reason}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+      {!isUploading && rejected.length > 0 && (
+        <ul className="mt-4 space-y-1 text-sm text-red-400">
+          {rejected.map((r, i) => (
+            <li key={`${r.name}-${i}`}>
+              {r.name}：{r.reason}
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

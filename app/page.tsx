@@ -1,4 +1,4 @@
-import DropZone from "@/components/DropZone";
+import ImageUploader from "@/components/ImageUploader";
 
 export default function Home() {
   return (
@@ -8,7 +8,7 @@ export default function Home() {
         jpg / png / webp、5MB 未満。複数枚まとめてアップロードできます。
       </p>
       <div className="mt-6">
-        <DropZone />
+        <ImageUploader />
       </div>
     </main>
   );
