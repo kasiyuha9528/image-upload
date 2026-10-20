@@ -2,15 +2,35 @@
 
 import { useRef, useState } from "react";
 import { CloudUpload, FolderPlus } from "lucide-react";
+import { validateImage } from "@/lib/validateImage";
+
+type Rejected = { name: string; reason: string };
 
 export default function DropZone() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [receivedCount, setReceivedCount] = useState<number | null>(null);
+  const [accepted, setAccepted] = useState<File[]>([]);
+  const [rejected, setRejected] = useState<Rejected[]>([]);
+  const [hasChecked, setHasChecked] = useState(false);
 
   function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
-    setReceivedCount(files.length);
+
+    const okFiles: File[] = [];
+    const ngFiles: Rejected[] = [];
+
+    for (const file of Array.from(files)) {
+      const result = validateImage(file);
+      if (result.ok) {
+        okFiles.push(file);
+      } else {
+        ngFiles.push({ name: file.name, reason: result.reason });
+      }
+    }
+
+    setAccepted(okFiles);
+    setRejected(ngFiles);
+    setHasChecked(true);
   }
 
   return (
@@ -97,10 +117,23 @@ export default function DropZone() {
         }}
       />
 
-      {receivedCount !== null && (
-        <p className="mt-4 text-sm text-gray-300">
-          {receivedCount} 枚のファイルを受け取りました（まだ保存はしません）
-        </p>
+      {hasChecked && (
+        <div className="mt-4 space-y-2 text-sm">
+          {accepted.length > 0 && (
+            <p className="text-gray-300">
+              {accepted.length} 枚が条件を満たしています（まだ保存はしません）
+            </p>
+          )}
+          {rejected.length > 0 && (
+            <ul className="space-y-1 text-red-400">
+              {rejected.map((r, i) => (
+                <li key={`${r.name}-${i}`}>
+                  {r.name}：{r.reason}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
     </div>
   );
