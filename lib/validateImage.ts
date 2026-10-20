@@ -4,7 +4,7 @@ export const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 export type ValidationResult = { ok: true } | { ok: false; reason: string };
 
-function getExtension(fileName: string): string {
+export function getExtension(fileName: string): string {
   const dotIndex = fileName.lastIndexOf(".");
   if (dotIndex <= 0) return "";
   return fileName.slice(dotIndex + 1).toLowerCase();
