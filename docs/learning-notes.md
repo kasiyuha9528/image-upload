@@ -62,12 +62,146 @@
 
 ---
 
+## ソースコードの流れ
+
+### App Router（`/` を開いたときに動くファイル）
+
+Next.js の App Router は、`app/` フォルダの中の**ファイル名とフォルダ名**でページが決まる仕組み。
+
+| ファイル | 役割 |
+|---|---|
+| `app/layout.tsx` | 全ページを包む外枠。`<html>`・`<body>`、フォント、共通 CSS、タイトル（`metadata`）を持つ |
+| `app/page.tsx` | `/` で表示される中身。見出しを置いて、`<ImageUploader />` を呼ぶだけ |
+
+`layout.tsx` の `{children}` の場所に、`page.tsx` の中身が入る（枠が layout、中身が page）。
+
+### 部品の入れ子と、つながる先
+
+```mermaid
+flowchart TB
+  subgraph layout["layout.tsx（html・body の外枠）"]
+    subgraph page["page.tsx（見出し）"]
+      subgraph uploader["ImageUploader（画像リスト images を持つ親）"]
+        DropZone["DropZone<br/>受け取り・保存"]
+        ImageGallery["ImageGallery<br/>表示・URLコピー"]
+      end
+    end
+  end
+  subgraph lib["lib/（画面を持たない裏方の関数）"]
+    validate["validateImage<br/>判定"]
+    upload["uploadImage<br/>保存"]
+    list["listImages<br/>一覧取得"]
+    supa["supabase<br/>接続"]
+  end
+  storage[("Supabase Storage<br/>images バケット")]
+  DropZone --> validate
+  DropZone --> upload
+  uploader --> list
+  upload -->|送る| storage
+  storage -->|もらう| list
+```
+
+- 画面に見える部品は `DropZone` と `ImageGallery`。`lib/` は画面を持たず、部品から呼ばれて仕事をする
+- Supabase とやり取りするのは、`uploadImage`（送る係）と `listImages`（もらう係）の 2 つだけ
+
+| ファイル | 役割 |
+|---|---|
+| `components/ImageUploader.tsx` | 画像リスト（`images`）を持つ親。開いたときに一覧を取り、子どもに渡す |
+| `components/DropZone.tsx` | ファイルを受け取り、判定して、OK の分だけ 1 枚ずつ保存する |
+| `components/ImageGallery.tsx` | 渡されたリストを正方形で並べる。クリックで公開 URL をコピー |
+| `lib/supabase.ts` | URL と公開用キーで、Supabase への接続を 1 つ作って共有する |
+| `lib/validateImage.ts` | 形式・空・サイズを判定し、`{ ok: true }` か `{ ok: false, reason }` を返す |
+| `lib/uploadImage.ts` | ランダムな名前で保存し、公開 URL を返す |
+| `lib/listImages.ts` | 保存済み画像を新しい順に 24 件取り、`{ name, url }` のリストで返す |
+
+### 画像をドロップしたときの流れ
+
+```mermaid
+flowchart TB
+  A["1. DropZone<br/>画像をドロップ／ファイル選択"] --> B["2. validateImage<br/>1枚ずつ 形式・空・サイズを判定"]
+  B -->|NG| X["理由を赤字で表示"]
+  B -->|OK| C["3. uploadImage → Supabase<br/>ランダム名で保存し、公開URLを返す"]
+  C -->|失敗| X
+  C -->|成功| D["4. ImageUploader<br/>onUploaded で images の先頭に追加"]
+  D --> E["5. ImageGallery<br/>新しいリストで、すぐ再表示"]
+```
+
+- 入り口はドロップと「ファイルを選択」の 2 つ。どちらも `handleFiles` に入る
+- OK と NG が混ざっていても、OK の分だけ保存し、NG は理由つきで表示する
+- `images` が変わると、React が自動で `ImageGallery` を描き直す。だから再読み込みが要らない
+
+### ページを開いたときの流れ
+
+```mermaid
+flowchart LR
+  A["ページを開く"] --> B["ImageUploader<br/>useEffect（1回だけ）"]
+  B --> C["listImages<br/>新しい順に24件"]
+  C --> D["images に入れる"]
+  D --> E["ImageGallery<br/>表示"]
+```
+
+### 子から親へ知らせる仕組み（`onUploaded`）
+
+```mermaid
+sequenceDiagram
+  participant P as ImageUploader（親）
+  participant C as DropZone（子）
+  P->>C: handleUploaded を onUploaded という名前で渡す
+  Note over C: チェック・アップロード
+  C->>P: onUploaded(done) を呼ぶ
+  Note over P: images を更新し、ImageGallery が描き直される
+```
+
+- 親が「終わったらこれを呼んでね」と関数を子に預け、子が終わったときに呼ぶ
+- 渡すときは `onUploaded={handleUploaded}`（`()` なし）。実行ではなく、関数そのものを渡す
+- React では、データは親から子へ渡すのが基本。子から親へ伝えるときは、親が関数を渡す
+- `on〜` は「〜したときに呼ばれる」という名付け方（`onClick`、`onDrop` と同じ）
+
+### Supabase に送るところ（`uploadImage`）
+
+```ts
+const { error } = await supabase.storage
+  .from("images")
+  .upload(path, file, { contentType: file.type });
+```
+
+```mermaid
+sequenceDiagram
+  participant B as ブラウザ（uploadImage）
+  participant S as Supabase Storage
+  B->>S: upload（ランダム名、画像、ファイルの種類）
+  Note over S: 権限（RLS）・サイズ・形式・同じ名前の有無をチェック
+  S-->>B: 結果（error あり／なし）
+  Note over B: 成功なら getPublicUrl で公開URLを作る
+```
+
+- ブラウザから Supabase へ**直接**送る（Vercel の 4.5MB 制限を受けない）
+- 画面の `validateImage` を通っても、Supabase がもう一度チェックする（二重チェック）
+- `contentType` を付けると、正しい種類で保存され、公開 URL を開いたときに画像として表示される
+
+### 公開 URL を付ける場所
+
+`getPublicUrl` で付けている。使う場所は、`uploadImage.ts`（保存した直後）と `listImages.ts`（一覧の 1 枚ずつ）の 2 か所。
+
+```
+https://（プロジェクトのURL）/storage/v1/object/public/images/（保存名）
+```
+
+- Supabase に問い合わせず、決まった形に文字をつなげるだけ（通信しない）
+- どちらも最後は `{ name, url }`（`GalleryImage`）にそろえるので、`ImageGallery` はどこから来た画像でも同じように表示できる
+
+---
+
 ## 用語集
 
 ### コード
 
 | 用語 | 意味 |
 |---|---|
+| `layout.tsx` / `page.tsx` | App Router の決まったファイル名。全体を包む外枠／そのURLで表示される中身 |
+| `{children}` | layout の中で、包まれる側（page の中身）が入る場所 |
+| `metadata` | この名前で export すると、ページのタイトルや説明文になる |
+| `onUploaded={handleUploaded}` | 親の関数を子に渡す書き方。子が呼ぶと、親の処理が動く |
 | `"use client"` | このファイルの部品は、ブラウザ側で動く、という宣言 |
 | `useState` | 画面が変化する「状態」を持つ仕組み |
 | `useRef` | 画面の部品（`<input>` など）を、コードから操作するための目印 |
